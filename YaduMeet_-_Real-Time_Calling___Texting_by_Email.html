@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YaduMeet - Live WebRTC Calling & Messaging</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PeerJS WebRTC Library -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.3);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(99, 102, 241, 0.6);
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-card {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans overflow-hidden antialiased bg-slate-950 text-slate-100">
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <!-- SIGN-UP / AUTH OVERLAY -->
+    <div id="authOverlay" class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4 transition-opacity duration-300">
+        <div class="glass-panel w-full max-w-md rounded-2xl p-8 border border-slate-800 shadow-2xl relative">
+            <div class="text-center mb-6">
+                <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-400 flex items-center justify-center shadow-lg shadow-indigo-500/30 text-white font-bold text-2xl mx-auto mb-3">
+                    Y
+                </div>
+                <h1 class="text-2xl font-bold text-slate-100">Welcome to YaduMeet</h1>
+                <p class="text-xs text-slate-400 mt-1">Direct WebRTC Calls & Messages by Email Address</p>
+            </div>
+
+            <form id="authForm" onsubmit="handleSignUp(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Full Name</label>
+                    <input type="text" id="regName" required placeholder="e.g. Alex Rivera" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Email Address</label>
+                    <input type="email" id="regEmail" required placeholder="alex@domain.com" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors">
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit" class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium shadow-lg shadow-indigo-900/30 transition-all flex items-center justify-center space-x-2">
+                        <span>Instant Sign In / Sign Up</span>
+                        <i class="fa-solid fa-arrow-right text-xs"></i>
+                    </button>
+                </div>
+            </form>
+
+            <div class="mt-6 pt-4 border-t border-slate-800/80 text-center">
+                <p class="text-[11px] text-slate-500">No passwords required. Your email address acts as your unique peer identifier for direct calls & chats.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN HEADER -->
+    <header class="glass-panel sticky top-0 z-30 px-4 py-3 flex items-center justify-between border-b border-slate-800">
+        <div class="flex items-center space-x-3">
+            <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-md shadow-indigo-500/20">
+                Y
+            </div>
+            <div>
+                <span class="font-bold text-base tracking-tight text-white">YaduMeet</span>
+                <p id="userDisplayEmail" class="text-[11px] text-indigo-400 font-mono">Not logged in</p>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="flex items-center bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+            <button id="tabBtnCalls" onclick="switchTab('calls')" class="flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-medium transition-all bg-indigo-600 text-white shadow-md">
+                <i class="fa-solid fa-video"></i>
+                <span class="hidden sm:inline">Calls</span>
+            </button>
+            <button id="tabBtnMessages" onclick="switchTab('messages')" class="flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all">
+                <i class="fa-solid fa-comments"></i>
+                <span class="hidden sm:inline">Messages</span>
+            </button>
+            <button id="tabBtnContacts" onclick="switchTab('contacts')" class="flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all">
+                <i class="fa-solid fa-address-book"></i>
+                <span class="hidden sm:inline">Contacts</span>
+            </button>
+            <button id="tabBtnGuide" onclick="switchTab('guide')" class="flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all">
+                <i class="fa-solid fa-cloud-arrow-up"></i>
+                <span class="hidden sm:inline">GitHub Deploy</span>
+            </button>
+        </nav>
+
+        <!-- Peer Network Connection Status -->
+        <div class="flex items-center space-x-3">
+            <div id="connectionBadge" class="flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-400 text-[11px]">
+                <span id="connectionDot" class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                <span id="p2pStatus">Connecting...</span>
+            </div>
+            <button onclick="handleLogout()" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-rose-400 border border-slate-800 transition-colors" title="Logout / Switch Account">
+                <i class="fa-solid fa-right-from-bracket text-xs"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN APP BODY -->
+    <main class="flex-1 relative overflow-hidden flex">
+
+        <!-- TAB 1: CALLS -->
+        <section id="tabCalls" class="w-full h-full flex flex-col lg:flex-row p-4 sm:p-6 gap-6 overflow-y-auto">
+            <!-- Call Initiator Panel -->
+            <div class="w-full lg:w-[360px] glass-panel rounded-2xl p-6 shadow-xl border border-slate-800 flex flex-col justify-between shrink-0">
+                <div>
+                    <h2 class="text-base font-semibold text-slate-100 mb-1 flex items-center gap-2">
+                        <i class="fa-solid fa-phone-volume text-indigo-400"></i>
+                        Direct Member Call
+                    </h2>
+                    <p class="text-xs text-slate-400 mb-6">Enter recipient's registered email address to establish an encrypted P2P audio/video stream.</p>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">Target Member Email</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-envelope absolute left-3 top-3.5 text-slate-500 text-xs"></i>
+                                <input type="email" id="targetCallEmail" placeholder="colleague@domain.com" class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3 pt-2">
+                            <button onclick="initiateCall(false)" class="py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-medium text-xs shadow-lg shadow-emerald-900/30 flex items-center justify-center space-x-2 transition-all">
+                                <i class="fa-solid fa-phone"></i>
+                                <span>Audio Call</span>
+                            </button>
+                            <button onclick="initiateCall(true)" class="py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium text-xs shadow-lg shadow-indigo-900/30 flex items-center justify-center space-x-2 transition-all">
+                                <i class="fa-solid fa-video"></i>
+                                <span>Video Call</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Saved Contacts Quick Dial -->
+                <div class="mt-8 pt-4 border-t border-slate-800">
+                    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-3">Saved Contacts</span>
+                    <div id="quickDialList" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Video Display Workspace -->
+            <div class="flex-1 glass-panel rounded-2xl p-6 shadow-xl border border-slate-800 flex flex-col items-center justify-center relative overflow-hidden bg-slate-950/60 min-h-[350px]">
+                <div class="w-full h-full relative flex items-center justify-center">
+                    <!-- Remote Video Feed -->
+                    <video id="remoteVideo" autoplay playsinline class="w-full h-full object-cover rounded-xl bg-slate-900"></video>
+                    
+                    <!-- Local Video Feed Overlay -->
+                    <video id="localVideo" autoplay playsinline muted class="absolute bottom-4 right-4 w-32 h-24 sm:w-48 sm:h-36 object-cover rounded-xl border-2 border-indigo-500/50 bg-slate-950 shadow-2xl z-20"></video>
+
+                    <!-- Standby Indicator -->
+                    <div id="videoPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-slate-950/80 z-10">
+                        <div class="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-600 text-2xl mb-3">
+                            <i class="fa-solid fa-video-slash"></i>
+                        </div>
+                        <p class="text-sm font-medium text-slate-300">Ready for Live WebRTC Streams</p>
+                        <p class="text-xs text-slate-500 max-w-xs mt-1">Enter a colleague's email or pick a saved contact to start an instant video or audio session.</p>
+                    </div>
+                </div>
+
+                <!-- Call Control Bar -->
+                <div id="callControlBar" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 hidden items-center space-x-3 bg-slate-900/90 backdrop-blur-md px-6 py-3 rounded-full border border-slate-800 shadow-2xl">
+                    <button id="toggleAudioBtn" onclick="toggleAudio()" class="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center text-sm transition-all" title="Mute/Unmute Mic">
+                        <i class="fa-solid fa-microphone"></i>
+                    </button>
+                    <button id="toggleVideoBtn" onclick="toggleVideo()" class="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center text-sm transition-all" title="Camera On/Off">
+                        <i class="fa-solid fa-video"></i>
+                    </button>
+                    <button id="toggleScreenBtn" onclick="toggleScreenShare()" class="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center text-sm transition-all" title="Share Screen">
+                        <i class="fa-solid fa-desktop"></i>
+                    </button>
+                    <button onclick="hangUpCall()" class="w-12 h-12 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center text-base shadow-lg shadow-rose-900/50 transition-all scale-105" title="End Call">
+                        <i class="fa-solid fa-phone-slash"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: MESSAGES -->
+        <section id="tabMessages" class="w-full h-full hidden flex flex-col md:flex-row p-4 sm:p-6 gap-6 overflow-hidden">
+            <!-- Sidebar -->
+            <div class="w-full md:w-80 glass-panel rounded-2xl flex flex-col border border-slate-800 overflow-hidden shrink-0">
+                <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+                    <h2 class="font-semibold text-slate-200 text-sm">Text Conversations</h2>
+                    <button onclick="promptAddContact()" class="p-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 transition-colors" title="Start Chat by Email">
+                        <i class="fa-solid fa-plus text-xs"></i>
+                    </button>
+                </div>
+                <div id="chatThreadList" class="flex-1 overflow-y-auto divide-y divide-slate-800/50">
+                    <!-- Threads list -->
+                </div>
+            </div>
+
+            <!-- Chat Window -->
+            <div class="flex-1 glass-panel rounded-2xl flex flex-col border border-slate-800 overflow-hidden">
+                <div class="px-6 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+                    <div>
+                        <h3 id="activeChatTargetEmail" class="font-semibold text-slate-100 text-sm font-mono">Select a conversation</h3>
+                        <p id="activeChatStatus" class="text-[10px] text-slate-400">Direct peer-to-peer channel</p>
+                    </div>
+                    <button onclick="callActiveChatUser()" class="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 text-xs font-medium transition-colors flex items-center space-x-1">
+                        <i class="fa-solid fa-phone text-[10px]"></i>
+                        <span>Call Member</span>
+                    </button>
+                </div>
+
+                <!-- Feed -->
+                <div id="chatFeed" class="flex-1 p-6 overflow-y-auto space-y-3">
+                    <div class="h-full flex flex-col items-center justify-center text-center text-slate-500">
+                        <i class="fa-solid fa-comments text-3xl mb-2 text-slate-700"></i>
+                        <p class="text-xs">Select a contact to begin direct encrypted P2P messaging.</p>
+                    </div>
+                </div>
+
+                <!-- Input -->
+                <div class="p-4 border-t border-slate-800 bg-slate-900/40">
+                    <form onsubmit="handleSendTextMessage(event)" class="flex items-center space-x-3">
+                        <input type="text" id="chatInput" placeholder="Type text message..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+                        <button type="submit" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-medium transition-all">
+                            <i class="fa-solid fa-paper-plane mr-1.5 text-[10px]"></i>
+                            <span>Send</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: CONTACTS -->
+        <section id="tabContacts" class="w-full h-full hidden p-4 sm:p-6 overflow-y-auto">
+            <div class="max-w-4xl mx-auto glass-panel rounded-2xl p-6 border border-slate-800">
+                <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-800">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-100">Saved Member Contacts</h2>
+                        <p class="text-xs text-slate-400">Manage member email addresses for quick dialing and chat threads.</p>
+                    </div>
+                    <button onclick="promptAddContact()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-medium transition-all flex items-center space-x-2">
+                        <i class="fa-solid fa-user-plus text-xs"></i>
+                        <span>Add Contact Email</span>
+                    </button>
+                </div>
+
+                <div id="fullContactsList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Dynamic Contact Cards -->
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: GITHUB DEPLOYMENT GUIDE -->
+        <section id="tabGuide" class="w-full h-full hidden p-4 sm:p-6 overflow-y-auto">
+            <div class="max-w-3xl mx-auto glass-panel rounded-2xl p-8 border border-slate-800 space-y-6">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-100 flex items-center gap-2">
+                        <i class="fa-brands fa-github text-indigo-400"></i>
+                        Deploy YaduMeet Free on GitHub Pages
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">This entire application is self-contained in a single HTML file. Follow these steps to host your own live instance:</p>
+                </div>
+
+                <ol class="space-y-4 text-xs text-slate-300">
+                    <li class="glass-card p-4 rounded-xl border border-slate-800/80">
+                        <strong class="text-indigo-400 block text-sm mb-1">Step 1: Create GitHub Repository</strong>
+                        Go to <a href="https://github.com/new" target="_blank" class="text-indigo-400 underline">github.com/new</a> and create a public repository named <code class="bg-slate-900 px-1.5 py-0.5 rounded text-slate-200">yadumeet</code>.
+                    </li>
+                    <li class="glass-card p-4 rounded-xl border border-slate-800/80">
+                        <strong class="text-indigo-400 block text-sm mb-1">Step 2: Add index.html File</strong>
+                        Create a file named <code class="bg-slate-900 px-1.5 py-0.5 rounded text-slate-200">index.html</code> in your repository and paste the complete code of this document into it.
+                    </li>
+                    <li class="glass-card p-4 rounded-xl border border-slate-800/80">
+                        <strong class="text-indigo-400 block text-sm mb-1">Step 3: Enable Pages Hosting</strong>
+                        Navigate to <strong>Settings</strong> &gt; <strong>Pages</strong> in your GitHub repository. Under <em>Build and deployment / Source</em>, choose <strong>Deploy from a branch</strong>, select <code class="bg-slate-900 px-1.5 py-0.5 rounded text-slate-200">main</code> branch and click <strong>Save</strong>.
+                    </li>
+                    <li class="glass-card p-4 rounded-xl border border-slate-800/80">
+                        <strong class="text-indigo-400 block text-sm mb-1">Step 4: Connect & Call</strong>
+                        Open your live URL (<code class="bg-slate-900 px-1.5 py-0.5 rounded text-slate-200">https://yourusername.github.io/yadumeet</code>) on two separate devices or browser tabs, sign up with different emails, and start live calling!
+                    </li>
+                </ol>
+            </div>
+        </section>
+    </main>
+
+    <!-- INCOMING CALL MODAL -->
+    <div id="incomingCallModal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md hidden flex items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-sm rounded-2xl p-6 text-center border border-slate-800 shadow-2xl relative">
+            <div class="w-16 h-16 rounded-full bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-2xl mx-auto mb-4 animate-bounce">
+                <i class="fa-solid fa-phone-volume"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-100">Incoming YaduMeet Call</h3>
+            <p id="callerEmailDisplay" class="text-xs font-mono text-indigo-400 mt-1 mb-6">caller@domain.com</p>
+
+            <div class="flex items-center justify-center space-x-4">
+                <button onclick="declineCall()" class="w-14 h-14 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center text-lg shadow-lg shadow-rose-900/40 transition-all">
+                    <i class="fa-solid fa-phone-slash"></i>
+                </button>
+                <button onclick="acceptCall()" class="w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center text-lg shadow-lg shadow-emerald-900/40 transition-all animate-pulse">
+                    <i class="fa-solid fa-phone"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- APPLICATION ENGINE -->
+    <script>
+        // Local state store
+        let currentUser = null;
+        let peer = null;
+        let activeCall = null;
+        let activeDataConnection = null;
+        let incomingCallSession = null;
+        let localStream = null;
+        let activeChatEmail = null;
+        let activeScreenSender = null;
+
+        // Utility: Convert email to safe peer ID string
+        function emailToPeerId(email) {
+            return 'yadumeet_' + email.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        }
+
+        // Toast notifications
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            
+            let bg = 'bg-slate-800 border-slate-700 text-slate-200';
+            if (type === 'success') bg = 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200';
+            if (type === 'error') bg = 'bg-rose-950/90 border-rose-500/40 text-rose-200';
+
+            toast.className = `px-4 py-2.5 rounded-xl border text-xs shadow-xl pointer-events-auto transition-all duration-300 transform translate-y-2 opacity-0 flex items-center space-x-2 ${bg}`;
+            toast.innerHTML = `<span>${message}</span>`;
+
+            container.appendChild(toast);
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // Sign Up Handler
+        function handleSignUp(e) {
+            e.preventDefault();
+            const name = document.getElementById('regName').value.trim();
+            const email = document.getElementById('regEmail').value.trim().toLowerCase();
+
+            if (!name || !email) {
+                showToast('Please enter both name and email.', 'error');
+                return;
+            }
+
+            currentUser = { name, email };
+            localStorage.setItem('yadumeet_user', JSON.stringify(currentUser));
+
+            document.getElementById('authOverlay').classList.add('opacity-0');
+            setTimeout(() => {
+                document.getElementById('authOverlay').classList.add('hidden');
+            }, 300);
+
+            document.getElementById('userDisplayEmail').innerText = `${name} (${email})`;
+            showToast(`Welcome back, ${name}!`, 'success');
+
+            initializePeerNetwork();
+            loadContacts();
+        }
+
+        // Logout Handler
+        function handleLogout() {
+            if (peer) peer.destroy();
+            localStorage.removeItem('yadumeet_user');
+            location.reload();
+        }
+
+        // Navigation Tabs
+        function switchTab(tab) {
+            const tabs = ['calls', 'messages', 'contacts', 'guide'];
+            tabs.forEach(t => {
+                const sec = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
+                const btn = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
+                if (t === tab) {
+                    sec.classList.remove('hidden');
+                    btn.className = "flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-medium transition-all bg-indigo-600 text-white shadow-md";
+                } else {
+                    sec.classList.add('hidden');
+                    btn.className = "flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all";
+                }
+            });
+        }
+
+        // Initialize PeerJS Signal Connection
+        function initializePeerNetwork() {
+            if (!currentUser) return;
+
+            const myPeerId = emailToPeerId(currentUser.email);
+            updatePeerStatus('Connecting...', 'amber');
+
+            // Connect to public PeerJS signaling server
+            peer = new Peer(myPeerId, {
+                debug: 1,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
+            });
+
+            peer.on('open', (id) => {
+                updatePeerStatus('Online', 'emerald');
+                showToast('Connected to P2P network', 'success');
+            });
+
+            peer.on('error', (err) => {
+                console.warn('PeerJS Network Error:', err);
+                if (err.type === 'unavailable-id') {
+                    updatePeerStatus('Online (Active Session)', 'emerald');
+                } else {
+                    updatePeerStatus('Signal Standby', 'amber');
+                    showToast('P2P signal server reconnecting...', 'info');
+                }
+            });
+
+            // Listen for incoming calls
+            peer.on('call', (call) => {
+                incomingCallSession = call;
+                const callerEmail = call.peer.replace('yadumeet_', '').replace(/_/g, '.');
+                document.getElementById('callerEmailDisplay').innerText = callerEmail;
+                document.getElementById('incomingCallModal').classList.remove('hidden');
+            });
+
+            // Listen for incoming text messages / data channels
+            peer.on('connection', (conn) => {
+                conn.on('data', (data) => {
+                    if (data && data.type === 'chat') {
+                        saveMessage(data.sender, currentUser.email, data.text);
+                        if (activeChatEmail === data.sender) {
+                            renderChatFeed();
+                        } else {
+                            showToast(`New message from ${data.sender}`, 'info');
+                        }
+                    }
+                });
+            });
+        }
+
+        function updatePeerStatus(label, color) {
+            const badge = document.getElementById('connectionBadge');
+            const dot = document.getElementById('connectionDot');
+            const text = document.getElementById('p2pStatus');
+
+            text.innerText = label;
+            if (color === 'emerald') {
+                dot.className = "w-2 h-2 rounded-full bg-emerald-500";
+                badge.className = "flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-[11px]";
+            } else {
+                dot.className = "w-2 h-2 rounded-full bg-amber-500 animate-pulse";
+                badge.className = "flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-400 text-[11px]";
+            }
+        }
+
+        // Direct WebRTC Calling
+        async function initiateCall(isVideo = true) {
+            const targetEmail = document.getElementById('targetCallEmail').value.trim().toLowerCase();
+            if (!targetEmail) {
+                showToast('Please enter a target email address.', 'error');
+                return;
+            }
+
+            const targetPeerId = emailToPeerId(targetEmail);
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: isVideo, audio: true });
+                document.getElementById('localVideo').srcObject = localStream;
+
+                activeCall = peer.call(targetPeerId, localStream);
+                
+                document.getElementById('videoPlaceholder').classList.add('hidden');
+                document.getElementById('callControlBar').classList.remove('hidden');
+                document.getElementById('callControlBar').classList.add('flex');
+
+                activeCall.on('stream', (remoteStream) => {
+                    document.getElementById('remoteVideo').srcObject = remoteStream;
+                });
+
+                activeCall.on('close', () => {
+                    hangUpCall();
+                });
+
+                showToast(`Calling ${targetEmail}...`, 'info');
+            } catch (err) {
+                showToast('Camera/Microphone permission denied or unavailable.', 'error');
+            }
+        }
+
+        async function acceptCall() {
+            document.getElementById('incomingCallModal').classList.add('hidden');
+            if (!incomingCallSession) return;
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById('localVideo').srcObject = localStream;
+
+                incomingCallSession.answer(localStream);
+                activeCall = incomingCallSession;
+
+                document.getElementById('videoPlaceholder').classList.add('hidden');
+                document.getElementById('callControlBar').classList.remove('hidden');
+                document.getElementById('callControlBar').classList.add('flex');
+
+                activeCall.on('stream', (remoteStream) => {
+                    document.getElementById('remoteVideo').srcObject = remoteStream;
+                });
+
+                activeCall.on('close', () => {
+                    hangUpCall();
+                });
+            } catch (err) {
+                showToast('Could not access microphone/camera.', 'error');
+            }
+        }
+
+        function declineCall() {
+            document.getElementById('incomingCallModal').classList.add('hidden');
+            if (incomingCallSession) {
+                incomingCallSession.close();
+            }
+        }
+
+        function hangUpCall() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            if (activeCall) {
+                activeCall.close();
+            }
+            document.getElementById('videoPlaceholder').classList.remove('hidden');
+            document.getElementById('callControlBar').classList.add('hidden');
+            document.getElementById('callControlBar').classList.remove('flex');
+            showToast('Call ended', 'info');
+        }
+
+        function toggleAudio() {
+            if (localStream) {
+                const track = localStream.getAudioTracks()[0];
+                if (track) {
+                    track.enabled = !track.enabled;
+                    showToast(track.enabled ? 'Microphone unmuted' : 'Microphone muted', 'info');
+                }
+            }
+        }
+
+        function toggleVideo() {
+            if (localStream) {
+                const track = localStream.getVideoTracks()[0];
+                if (track) {
+                    track.enabled = !track.enabled;
+                    showToast(track.enabled ? 'Camera enabled' : 'Camera disabled', 'info');
+                }
+            }
+        }
+
+        async function toggleScreenShare() {
+            try {
+                const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                const screenTrack = screenStream.getVideoTracks()[0];
+                if (activeCall) {
+                    const sender = activeCall.peerConnection.getSenders().find(s => s.track.kind === 'video');
+                    if (sender) sender.replaceTrack(screenTrack);
+                }
+                document.getElementById('localVideo').srcObject = screenStream;
+                screenTrack.onended = () => {
+                    if (localStream && activeCall) {
+                        const sender = activeCall.peerConnection.getSenders().find(s => s.track.kind === 'video');
+                        if (sender) sender.replaceTrack(localStream.getVideoTracks()[0]);
+                    }
+                    document.getElementById('localVideo').srcObject = localStream;
+                };
+            } catch (err) {
+                showToast('Screen share canceled.', 'info');
+            }
+        }
+
+        // Contact Store Management
+        function getSavedContacts() {
+            return JSON.parse(localStorage.getItem('yadumeet_contacts') || '[]');
+        }
+
+        function promptAddContact() {
+            const email = prompt("Enter contact member email:");
+            if (!email) return;
+            const clean = email.trim().toLowerCase();
+            let contacts = getSavedContacts();
+            if (!contacts.includes(clean)) {
+                contacts.push(clean);
+                localStorage.setItem('yadumeet_contacts', JSON.stringify(contacts));
+                loadContacts();
+                showToast(`Added ${clean} to contacts`, 'success');
+            }
+        }
+
+        function loadContacts() {
+            const contacts = getSavedContacts();
+            const quickList = document.getElementById('quickDialList');
+            const fullList = document.getElementById('fullContactsList');
+            const chatThreadList = document.getElementById('chatThreadList');
+
+            quickList.innerHTML = '';
+            fullList.innerHTML = '';
+            chatThreadList.innerHTML = '';
+
+            if (contacts.length === 0) {
+                quickList.innerHTML = `<p class="text-[11px] text-slate-500 italic">No saved contacts yet.</p>`;
+                fullList.innerHTML = `<p class="text-xs text-slate-500 col-span-full">No contacts added. Click above to add members by email.</p>`;
+                chatThreadList.innerHTML = `<p class="text-xs text-slate-500 p-4">No active conversations.</p>`;
+                return;
+            }
+
+            contacts.forEach(email => {
+                // Quick dial list
+                quickList.innerHTML += `
+                    <div class="glass-card p-2 rounded-xl flex items-center justify-between hover:bg-slate-800/60 transition-colors">
+                        <span class="text-xs font-mono text-slate-300 truncate">${email}</span>
+                        <button onclick="quickCall('${email}')" class="p-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-xs">
+                            <i class="fa-solid fa-phone"></i>
+                        </button>
+                    </div>
+                `;
+
+                // Full contacts grid
+                fullList.innerHTML += `
+                    <div class="glass-card p-4 rounded-xl border border-slate-800/80 flex flex-col justify-between">
+                        <div>
+                            <div class="w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center font-bold text-xs mb-2">
+                                ${email.charAt(0).toUpperCase()}
+                            </div>
+                            <p class="text-xs font-mono font-medium text-slate-200 truncate">${email}</p>
+                        </div>
+                        <div class="flex items-center space-x-2 mt-4 pt-3 border-t border-slate-800">
+                            <button onclick="quickCall('${email}')" class="flex-1 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 rounded-lg text-xs font-medium transition-colors">Call</button>
+                            <button onclick="openChatWith('${email}')" class="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition-colors">Message</button>
+                        </div>
+                    </div>
+                `;
+
+                // Chat thread item
+                chatThreadList.innerHTML += `
+                    <div onclick="openChatWith('${email}')" class="p-3.5 hover:bg-slate-800/50 cursor-pointer transition-colors flex items-center space-x-3">
+                        <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-indigo-400">
+                            ${email.charAt(0).toUpperCase()}
+                        </div>
+                        <div class="truncate">
+                            <p class="text-xs font-mono text-slate-200 truncate">${email}</p>
+                            <p class="text-[10px] text-slate-500 truncate">Tap to send direct message</p>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function quickCall(email) {
+            document.getElementById('targetCallEmail').value = email;
+            switchTab('calls');
+            initiateCall(true);
+        }
+
+        // Messaging Engine
+        function getMessagesStore() {
+            return JSON.parse(localStorage.getItem('yadumeet_messages') || '{}');
+        }
+
+        function saveMessage(sender, receiver, text) {
+            const store = getMessagesStore();
+            const threadKey = [sender, receiver].sort().join('_');
+            if (!store[threadKey]) store[threadKey] = [];
+
+            store[threadKey].push({
+                sender,
+                text,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+
+            localStorage.setItem('yadumeet_messages', JSON.stringify(store));
+        }
+
+        function openChatWith(email) {
+            activeChatEmail = email;
+            document.getElementById('activeChatTargetEmail').innerText = email;
+            switchTab('messages');
+            renderChatFeed();
+        }
+
+        function renderChatFeed() {
+            if (!activeChatEmail || !currentUser) return;
+
+            const store = getMessagesStore();
+            const threadKey = [currentUser.email, activeChatEmail].sort().join('_');
+            const msgs = store[threadKey] || [];
+            const feed = document.getElementById('chatFeed');
+
+            if (msgs.length === 0) {
+                feed.innerHTML = `
+                    <div class="h-full flex flex-col items-center justify-center text-center text-slate-500">
+                        <i class="fa-solid fa-comments text-3xl mb-2 text-slate-700"></i>
+                        <p class="text-xs">No messages yet with ${activeChatEmail}. Send a message below!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            feed.innerHTML = msgs.map(m => {
+                const isMe = m.sender === currentUser.email;
+                return `
+                    <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'}">
+                        <div class="max-w-[75%] px-4 py-2 rounded-2xl text-xs ${isMe ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700'}">
+                            ${m.text}
+                        </div>
+                        <span class="text-[9px] text-slate-500 mt-1">${m.time}</span>
+                    </div>
+                `;
+            }).join('');
+
+            feed.scrollTop = feed.scrollHeight;
+        }
+
+        function handleSendTextMessage(e) {
+            e.preventDefault();
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text || !activeChatEmail) return;
+
+            saveMessage(currentUser.email, activeChatEmail, text);
+            renderChatFeed();
+
+            // Transmit P2P data frame
+            const targetPeerId = emailToPeerId(activeChatEmail);
+            const conn = peer.connect(targetPeerId);
+            conn.on('open', () => {
+                conn.send({
+                    type: 'chat',
+                    sender: currentUser.email,
+                    text: text
+                });
+            });
+
+            input.value = '';
+        }
+
+        function callActiveChatUser() {
+            if (activeChatEmail) quickCall(activeChatEmail);
+        }
+
+        // Auto Login on Load
+        window.addEventListener('DOMContentLoaded', () => {
+            const saved = localStorage.getItem('yadumeet_user');
+            if (saved) {
+                currentUser = JSON.parse(saved);
+                document.getElementById('authOverlay').classList.add('hidden');
+                document.getElementById('userDisplayEmail').innerText = `${currentUser.name} (${currentUser.email})`;
+                initializePeerNetwork();
+                loadContacts();
+            }
+        });
+    </script>
+</body>
+</html>
